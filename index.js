@@ -3,6 +3,10 @@ const express = require('express');
 const { AzureOpenAI } = require('openai');
 const app = express();
 const port = process.env.PORT || 5000;
+const fs = require('fs');
+const https = require('https');
+const os = require('os');
+const path = require('path');
 
 const azureOpenAIKey = process.env.AZURE_OPENAI_KEY;
 const azureOpenAIEndpoint = process.env.AZURE_OPENAI_ENDPOINT;
@@ -36,7 +40,7 @@ app.post('/ask', async (req, res) => {
   const options = {
     model: "gpt-4o-mini-2",
     name: "Assistant129",
-    instructions: "You are here to visualize and generate charts and graphs. You are also going to process Excel files that is used for summarization.",
+    instructions: "You are here to visualize and generate charts and graphs. You are also generate contents for business reports, presentations, and proposals",
     tools: [{ type: "code_interpreter" }],
     tool_resources: {"code_interpreter":{"file_ids":[]}},
     temperature: 1,
@@ -93,13 +97,77 @@ app.post('/ask', async (req, res) => {
           console.log(`Messages in the thread: ${JSON.stringify(messagesResponse)}`);
           const messages = [];
           let firstResponseAdded = false;
+          let fileName = '';
+          let filePath = '';
+          let fileId = '';
           for await (const runMessageDatum of messagesResponse) {
             for (const item of runMessageDatum.content) {
                 if (!firstResponseAdded){
                   if (item.type === "text") {
                     messages.push({ type: "text", content: item.text?.value});
                     console.log(`Message: ${item.text?.value}`);
+                    console.log(`Attachment: ${JSON.stringify(item.text?.annotations)}`);
                     firstResponseAdded = true;
+                    // const baseName = item.text?.value.split(' ').slice(-1)[0];
+                    // let extension = 'xlsx'; // Default extension
+                    // if (item.text?.value.includes('DOCX')) {
+                    //   extension = 'docx';
+                    // } else if (item.text?.value.includes('PDF')) {
+                    //   extension = 'pdf';
+                    // } else if (item.text?.value.includes('PPTX')) {
+                    //   extension = 'pptx';
+                    // }
+                    // fileName = `${baseName}.${extension}`;
+                    // // console.log(`Generated filename: ${fileName}`);
+                    if (item.text?.annotations) {
+                      const annotations = item.text.annotations.filter(ann => ann.type === 'file_path');
+                      for (const annotation of annotations) {
+                        const filePath = annotation.text.replace('sandbox:', '');
+                        const fileId = annotation.file_path.file_id;
+                        console.log(`Extracted file path: ${filePath}`);
+                        console.log(`Extracted file ID: ${fileId}`);
+                    
+                        // Define the destination path
+                        const downloadsDir = path.join(os.homedir(), 'Downloads');
+                        const destPath = path.join(downloadsDir, path.basename(filePath));
+                    
+                        // Ensure the downloads directory exists
+                        if (!fs.existsSync(downloadsDir)) {
+                          fs.mkdirSync(downloadsDir);
+                        }
+                    
+                        // Define the file URL
+                        const fileUrl = `https://azure2234.openai.azure.com/openai/files/${fileId}/content?api-version=2024-05-01-preview`;
+                    
+                        try {
+                          // Fetch and download the file from URL
+                          const response = await fetch(fileUrl, {
+                            headers: {
+                              'api-key': process.env.AZURE_OPENAI_KEY
+                            }
+                          });
+                    
+                          if (!response.ok) {
+                            throw new Error(`Failed to download file: ${response.statusText}`);
+                          }
+                    
+                          // Get the file content as an array buffer
+                          const arrayBuffer = await response.arrayBuffer();
+                          const buffer = Buffer.from(arrayBuffer);
+                    
+                          // Write the buffer to a file
+                          fs.writeFileSync(destPath, buffer);
+                    
+                          console.log(`File downloaded to: ${destPath}`);
+                    
+                          // Generate a download link message
+                          const downloadLink = `http://localhost:3000/downloads/${path.basename(filePath)}`;
+                          messages.push({ type: "text", content: `File is available for download: ${downloadLink}` });
+                        } catch (error) {
+                          console.error(`Error fetching file: ${error.message}`);
+                        }
+                      }
+                    }
                   } else if (item.type === "image_file") {
                     try {
                       const imageResponse = await fetch(`https://azure2234.openai.azure.com/openai/files/${item.image_file.file_id}/content?api-version=2024-05-01-preview`, {
@@ -116,7 +184,6 @@ app.post('/ask', async (req, res) => {
                         console.error(`Error retrieving image file: ${decodedResponse}`);
                       } else {
                         messages.push({ type: "image", content: base64Image });
-                        firstResponseAdded = true;
                       }
                     } catch (error) {
                       console.error(`Error retrieving image file: ${error.message}`);
@@ -125,6 +192,7 @@ app.post('/ask', async (req, res) => {
                 }
             }
           }
+        
         res.json({ messages });
       } else {
         res.status(500).json({ error: 'Failed to fetch messages' });
@@ -134,6 +202,31 @@ app.post('/ask', async (req, res) => {
       res.status(500).json({ error: error.message });
     }
   });
+  // app.get('/download', async (req, res) => {
+  //   const filePath = req.query.filePath;
+  //   const fileId = req.query.fileId;
+  //   const fileName = path.basename(filePath);
+  
+  //   try {
+  //     const fileResponse = await fetch(`https://azure2234.openai.azure.com/openai/files/${fileId}/content?api-version=2024-05-01-preview`, {
+  //       headers: {
+  //         'api-key': process.env.AZURE_OPENAI_KEY
+  //       }
+  //     });
+  
+  //     if (!fileResponse.ok) {
+  //       throw new Error('Failed to fetch file from Azure');
+  //     }
+  
+  //     const fileBuffer = await fileResponse.buffer();
+  //     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  //     res.send(fileBuffer);
+  //     console.log(`File ${fileName} downloaded successfully.`);
+  //   } catch (error) {
+  //     console.error('Error downloading file:', error);
+  //     res.status(500).send('Error downloading file');
+  //   }
+  // });
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
