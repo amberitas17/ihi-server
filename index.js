@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const { AzureOpenAI } = require('openai');
 const app = express();
-const port = process.env.PORT || 5000;
+const port = process.env.PORT || 80;
 const fs = require('fs');
 const https = require('https');
 const os = require('os');
@@ -32,7 +32,7 @@ const assistantsClient = getClient();
 app.use(express.json());
 
 // Serve static files from the 'public' directory
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.post('/ask', async (req, res) => {
   const userMessage = req.body.message;
