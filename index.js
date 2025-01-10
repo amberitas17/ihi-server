@@ -7,6 +7,7 @@ const fs = require('fs');
 const https = require('https');
 const os = require('os');
 const path = require('path');
+const fetch = require('node-fetch');
 
 const azureOpenAIKey = process.env.AZURE_OPENAI_KEY;
 const azureOpenAIEndpoint = process.env.AZURE_OPENAI_ENDPOINT;
@@ -30,6 +31,9 @@ const getClient = () => {
 const assistantsClient = getClient();
 
 app.use(express.json());
+
+// Serve static files from the 'public' directory
+app.use(express.static('public'));
 
 app.post('/ask', async (req, res) => {
   const userMessage = req.body.message;
