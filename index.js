@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const { AzureOpenAI } = require('openai');
 const app = express();
-const port = process.env.PORT || 80;
+const port = process.env.PORT || 5000;
 const fs = require('fs');
 const https = require('https');
 const os = require('os');
